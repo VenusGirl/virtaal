@@ -1180,7 +1180,8 @@ class MainView(BaseView):
         infobar = Gtk.InfoBar()
         infobar.set_message_type(Gtk.MessageType.INFO)
         infobar.set_show_close_button(True)
-        label = Gtk.Label(label=_('Virtaal %s is available (you have %s)') % (tag_name, ver))
+        # The tag is v1.0.0; ver has no v.
+        label = Gtk.Label(label=_('Virtaal %s is available (you have %s)') % (tag_name.removeprefix('v'), ver))
         infobar.get_content_area().pack_start(label, True, True, 0)
         if asset_url:
             infobar.add_button(_('Release Notes'), Gtk.ResponseType.HELP)
@@ -1188,10 +1189,12 @@ class MainView(BaseView):
 
         def on_response(infobar, response_id):
             from virtaal.support import openmailto
+            if response_id == Gtk.ResponseType.HELP:
+                # Stays, so Download is still there after reading the notes.
+                openmailto.open(html_url)
+                return
             if response_id == Gtk.ResponseType.OK:
                 openmailto.open(asset_url or html_url)
-            elif response_id == Gtk.ResponseType.HELP:
-                openmailto.open(html_url)
             infobar.destroy()
         infobar.connect('response', on_response)
 

@@ -127,6 +127,20 @@ def test_query_emits_a_cached_match():
     assert emitted == [('hello', [{'target': 'Hallo'}])]
 
 
+def test_query_uses_apy_language_codes_for_a_supported_pair():
+    model = _model()
+    model.source_lang = 'en'
+    model.target_lang = 'ca'
+    model.language_pairs = [('eng', 'cat')]
+    added = []
+    model.client = SimpleNamespace(add=lambda req: added.append(req))
+
+    model.query(None, SimpleNamespace(source='The house is big.'))
+
+    assert len(added) == 1
+    assert 'langpair=eng%7Ccat' in added[0].url
+
+
 def test_query_sends_a_translate_request_for_an_uncached_pair():
     added = []
     model = _model()
@@ -136,6 +150,79 @@ def test_query_sends_a_translate_request_for_an_uncached_pair():
 
     assert len(added) == 1
     assert 'langpair=en%7Caf' in added[0].url
+
+
+# A query made before the pair list arrives waits for it (#4677).
+
+def _model_fetching_pairs(monkeypatch):
+    monkeypatch.setattr(apertium, 'HTTPClient', _FakeHTTPClient)
+    monkeypatch.setattr(TMModel, 'load_config', lambda self: setattr(self, 'config', {}))
+    return TMModel('apertium', _fake_controller())
+
+
+def _pairs_reply(*pairs):
+    return json.dumps({
+        'responseStatus': 200,
+        'responseData': [{'sourceLanguage': s, 'targetLanguage': t} for s, t in pairs],
+    })
+
+
+def test_query_before_the_pairs_arrive_runs_once_they_do(monkeypatch):
+    model = _model_fetching_pairs(monkeypatch)
+    langreq = model.client.added[0]
+
+    model.query(None, SimpleNamespace(source='hello'))
+    assert model.client.added == [langreq]
+
+    langreq.emit('http-success', _pairs_reply(('en', 'af')))
+
+    assert len(model.client.added) == 2
+    assert 'q=hello' in model.client.added[1].url
+
+
+def test_only_the_last_query_before_the_pairs_arrive_runs(monkeypatch):
+    model = _model_fetching_pairs(monkeypatch)
+
+    model.query(None, SimpleNamespace(source='first'))
+    model.query(None, SimpleNamespace(source='second'))
+    model.client.added[0].emit('http-success', _pairs_reply(('en', 'af')))
+
+    assert [r.url for r in model.client.added[1:]] == [
+        model.url_translate + '?q=second&langpair=en%7Caf&markUnknown=no&format=html']
+
+
+def test_query_held_for_an_unlisted_pair_sends_nothing(monkeypatch):
+    model = _model_fetching_pairs(monkeypatch)
+
+    model.query(None, SimpleNamespace(source='hello'))
+    model.client.added[0].emit('http-success', _pairs_reply(('fr', 'de')))
+
+    assert len(model.client.added) == 1
+
+
+def test_queries_after_the_pairs_arrive_are_not_held(monkeypatch):
+    model = _model_fetching_pairs(monkeypatch)
+    model.client.added[0].emit('http-success', _pairs_reply(('en', 'af')))
+
+    model.query(None, SimpleNamespace(source='hello'))
+
+    assert len(model.client.added) == 2
+
+
+def test_an_unreadable_pair_list_stops_holding_queries(monkeypatch):
+    model = _model_fetching_pairs(monkeypatch)
+
+    model.client.added[0].emit('http-success', 'not json')
+
+    assert model.languages_known
+
+
+def test_a_failed_pair_list_request_stops_holding_queries(monkeypatch):
+    model = _model_fetching_pairs(monkeypatch)
+
+    model.client.added[0].emit('http-server-error', 503)
+
+    assert model.languages_known
 
 
 # got_translation()
@@ -218,3 +305,48 @@ def test_got_language_pairs_ignores_a_reply_it_cannot_read(reply):
     model.got_language_pairs(reply)
 
     assert model.language_pairs == []
+
+
+# apy_codes() / _apy_pair(): APY lists ISO 639-3 codes, Virtaal uses
+# two-letter codes where they exist (#4664).
+
+@pytest.mark.parametrize('code, expected', [
+    ('ca', ['ca', 'cat']),
+    ('ca@valencia', ['ca@valencia', 'cat_valencia', 'cat']),
+    ('pt_BR', ['pt_BR', 'por_BR', 'por']),
+    ('en_GB', ['en_GB', 'eng_GB', 'eng']),
+    ('sr', ['sr', 'hbs_SR', 'hbs']),
+    ('ms', ['ms', 'zlm']),
+    ('sc', ['sc', 'srd']),
+    ('crh', ['crh']),
+])
+def test_apy_codes_most_specific_first(code, expected):
+    assert apertium.apy_codes(code) == expected
+
+
+@pytest.mark.parametrize('source, target, pairs, langpair', [
+    ('en', 'ca@valencia', [('eng', 'cat'), ('eng', 'cat_valencia')], 'eng|cat_valencia'),
+    ('en_GB', 'ca@valencia', [('eng', 'cat')], 'eng|cat'),
+    ('es', 'pt_BR', [('spa', 'por'), ('spa', 'por_BR')], 'spa|por_BR'),
+])
+def test_query_sends_the_most_specific_listed_apy_pair(source, target, pairs, langpair):
+    model = _model()
+    model.source_lang, model.target_lang = source, target
+    model.language_pairs = pairs
+    model.client = _FakeHTTPClient()
+
+    model.query(None, SimpleNamespace(source='The house is big.'))
+
+    assert len(model.client.added) == 1
+    assert 'langpair=' + langpair.replace('|', '%7C') in model.client.added[0].url
+
+
+def test_query_sends_nothing_when_no_apy_pair_matches():
+    model = _model()
+    model.source_lang, model.target_lang = 'en', 'zu'
+    model.language_pairs = [('eng', 'cat')]
+    model.client = _FakeHTTPClient()
+
+    model.query(None, SimpleNamespace(source='The house is big.'))
+
+    assert model.client.added == []

@@ -23,6 +23,7 @@ msgstr ""
 
 #: share/applications/io.github.translate.Virtaal.desktop.in
 #: share/virtaal/virtaal.ui virtaal/views/mainview.py
+#: virtaal/views/widgets/aboutdialog.py
 msgid "Virtaal"
 msgstr "Virtaal"
 
@@ -565,6 +566,11 @@ msgstr ""
 #: devsupport/tmp_strings.py
 msgid "Edit with Virtaal"
 msgstr "Editar com Virtaal"
+
+#. l10n: Windows installer option, shown only when Virtaal 0.7 is installed
+#: devsupport/tmp_strings.py
+msgid "Uninstall the older Virtaal 0.7 first"
+msgstr ""
 
 #: devsupport/tmp_strings.py
 msgid "usage: "
@@ -2556,14 +2562,6 @@ msgstr "(%s)"
 msgid "This file has unsaved changes."
 msgstr "Este arquivo tem alterações não salvas."
 
-#: virtaal/views/storeview.py
-msgid "Export failed"
-msgstr "Falha ao exportar"
-
-#: virtaal/views/storeview.py
-msgid "Preview failed"
-msgstr "Falha na visualização"
-
 #: virtaal/views/unitview.py
 msgid "Move one step back in the workflow (Ctrl+Shift+Enter)"
 msgstr "Mover um passo atrás no fluxo de trabalho (Ctrl+Shift+Enter)"
@@ -3237,3 +3235,9 @@ msgstr "Muitos plug-ins e opções para personalização"
 #~ msgstr ""
 #~ "Ao editar uma tradução aproximada, o marcador de aproximada será removido "
 #~ "automaticamente."
+
+#~ msgid "Export failed"
+#~ msgstr "Falha ao exportar"
+
+#~ msgid "Preview failed"
+#~ msgstr "Falha na visualização"

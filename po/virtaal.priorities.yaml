@@ -2,7 +2,7 @@
 # po/priorities.toml's rules and what Virtaal shows - don't edit it. See
 # po/README.md.
 format: 1
-pot-creation-date: 2026-10-13 18:54+0100
+pot-creation-date: 2026-10-31 14:30+0000
 priorities:
 - id: '1'
   name: Level 1 core
@@ -220,6 +220,7 @@ domains:
     - Report a _Bug
     - Search
     - Settings…
+    - Show Lo_gs
     - Suggestions for This _Unit
     - Terminology _Files…
     - Transfer From Source
@@ -651,7 +652,6 @@ domains:
     - Error opening file
     - 'Existing translations: %(translations)s'
     - Export
-    - Export failed
     - Extendable
     - File
     - Google Translate
@@ -691,7 +691,6 @@ domains:
     - Please enter the number of noun forms (plurals) to use
     - Please enter the plural equation to use
     - 'Plural expression:'
-    - Preview failed
     - Previous state
     - Previous translations for Free and Open Source Software
     - Previous translations you have made
@@ -717,7 +716,6 @@ domains:
     - Select the sources of terminology suggestions
     - Select the sources that should be queried for translation memory
     - Selected localization terminology
-    - Show Lo_gs
     - Source and target language are the same.
     - Spaces
     - Synonyms
@@ -734,6 +732,7 @@ domains:
 
 
       %(errormsg)s'
+    - Uninstall the older Virtaal 0.7 first
     - Unreviewed machine translations from Apertium
     - Unreviewed machine translations from Google's translation service
     - Unreviewed machine translations from a Moses server

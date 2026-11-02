@@ -17,7 +17,12 @@ from gi.repository import Gdk, Gtk
 from translate.misc.multistring import multistring
 from translate.storage.placeables.strelem import StringElem
 
-from virtaal.views.unitview import UnitView, _NotesView, _programmer_notes
+from virtaal.views.unitview import (
+    UnitView,
+    _active_dialog,
+    _NotesView,
+    _programmer_notes,
+)
 
 
 class _FakeParent:
@@ -236,6 +241,81 @@ class _FakeEditableTextbox:
         self.move_calls.append(direction)
 
 
+@pytest.fixture(autouse=True)
+def no_active_dialog(monkeypatch):
+    """No dialog has the focus unless a test says so."""
+    monkeypatch.setattr('virtaal.views.unitview._active_dialog', lambda widget: None)
+
+
+@pytest.fixture
+def dialog_entry(monkeypatch):
+    """A text field in a dialog that has the focus."""
+    entry = Gtk.Entry()
+    dialog = SimpleNamespace(get_focus=lambda: entry)
+    monkeypatch.setattr('virtaal.views.unitview._active_dialog', lambda widget: dialog)
+    emitted = []
+    monkeypatch.setattr(entry, 'emit', lambda signal: emitted.append(signal))
+    return entry, emitted
+
+
+class _FakeWindow:
+    def __init__(self, active=False, visible=True, over=None):
+        self._active, self._visible, self._over = active, visible, over
+
+    def is_active(self):
+        return self._active
+
+    def get_visible(self):
+        return self._visible
+
+    def get_transient_for(self):
+        return self._over
+
+    def get_toplevel(self):
+        return self
+
+
+@pytest.mark.parametrize('windows, expected', [
+    (lambda main: [main, _FakeWindow(active=True, over=main)], 1),
+    (lambda main: [main, _FakeWindow(over=main), _FakeWindow(active=True, over=_FakeWindow(over=main))], 2),
+    (lambda main: [main, _FakeWindow(active=True)], None),
+    (lambda main: [main, _FakeWindow(active=True, visible=False, over=main)], None),
+], ids=['dialog', 'dialog over a dialog', 'unrelated window', 'hidden dialog'])
+def test_active_dialog_is_an_active_window_over_the_main_one(monkeypatch, windows, expected):
+    main = _FakeWindow()
+    toplevels = windows(main)
+    monkeypatch.setattr('virtaal.views.unitview.Gtk.Window.list_toplevels', lambda: toplevels)
+
+    assert _active_dialog(main) is (None if expected is None else toplevels[expected])
+
+
+@pytest.mark.parametrize('action, signal', [('_on_cut', 'cut-clipboard'), ('_on_copy', 'copy-clipboard'),
+                                            ('_on_paste', 'paste-clipboard')])
+def test_clipboard_actions_go_to_a_focused_dialog_field(dialog_entry, action, signal):
+    # #4609: on macOS, Cmd+V in Preferences pasted into the translation.
+    entry, emitted = dialog_entry
+    target = _FakeEditableTextbox(focused=True)
+    view = UnitView.__new__(UnitView)
+    view._widgets = {'targets': [target], 'sources': []}
+
+    getattr(view, action)(None)
+
+    assert emitted == [signal]
+    assert (target.buffer.cut_calls, target.buffer.copy_calls, target.buffer.paste_calls) == ([], [], [])
+
+
+def test_paste_does_nothing_when_the_dialog_has_no_text_field_focused(monkeypatch):
+    dialog = SimpleNamespace(get_focus=lambda: Gtk.Button())
+    monkeypatch.setattr('virtaal.views.unitview._active_dialog', lambda widget: dialog)
+    target = _FakeEditableTextbox(focused=True)
+    view = UnitView.__new__(UnitView)
+    view._widgets = {'targets': [target], 'sources': []}
+
+    view._on_paste(None)
+
+    assert target.buffer.paste_calls == []
+
+
 def test_cut_cuts_from_the_focused_target_only():
     view = UnitView.__new__(UnitView)
     unfocused, focused = _FakeEditableTextbox(), _FakeEditableTextbox(focused=True)
@@ -296,6 +376,24 @@ def test_paste_pastes_into_the_focused_target():
     assert focused.buffer.paste_calls == [True]
 
 
+def test_placeable_actions_do_nothing_while_a_dialog_has_the_focus(dialog_entry):
+    # #4609: the main window's shortcuts still fire on macOS while a dialog has the focus.
+    view = UnitView.__new__(UnitView)
+    target = _FakeEditableTextbox(focused=True)
+    view._widgets = {'targets': [target], 'sources': []}
+    view._focused_target_n = 0
+    changed = []
+    view.copy_original = view.insert_placeable = lambda textbox: changed.append(textbox)
+
+    view._on_next_placeable()
+    view._on_prev_placeable()
+    view._on_transfer()
+    view._on_insert_placeable()
+
+    assert target.move_calls == []
+    assert changed == []
+
+
 def test_next_placeable_moves_selection_forward_on_the_focused_target():
     view = UnitView.__new__(UnitView)
     other, current = _FakeEditableTextbox(), _FakeEditableTextbox()
@@ -317,6 +415,18 @@ def test_prev_placeable_moves_selection_backward_on_the_focused_target():
     view._on_prev_placeable()
 
     assert current.move_calls == [-1]
+
+
+def test_insert_placeable_acts_on_the_focused_target():
+    view = UnitView.__new__(UnitView)
+    focused = _FakeEditableTextbox(focused=True)
+    view._widgets = {'targets': [_FakeEditableTextbox(), focused], 'sources': []}
+    inserted = []
+    view.insert_placeable = lambda textbox: inserted.append(textbox)
+
+    view._on_insert_placeable()
+
+    assert inserted == [focused]
 
 
 def test_transfer_copies_the_source_into_the_focused_target():

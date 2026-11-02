@@ -21,6 +21,7 @@ msgstr ""
 # 生成的文件保存于 share/locale/
 #: share/applications/io.github.translate.Virtaal.desktop.in
 #: share/virtaal/virtaal.ui virtaal/views/mainview.py
+#: virtaal/views/widgets/aboutdialog.py
 msgid "Virtaal"
 msgstr "Virtaal"
 
@@ -551,6 +552,11 @@ msgstr "关联 Virtaal 到翻译文件类型 (.po, .xlf, .tmx, ...)"
 #: devsupport/tmp_strings.py
 msgid "Edit with Virtaal"
 msgstr "用 Virtaal 编辑"
+
+#. l10n: Windows installer option, shown only when Virtaal 0.7 is installed
+#: devsupport/tmp_strings.py
+msgid "Uninstall the older Virtaal 0.7 first"
+msgstr ""
 
 #: devsupport/tmp_strings.py
 msgid "usage: "
@@ -2446,14 +2452,6 @@ msgstr "(%s)"
 msgid "This file has unsaved changes."
 msgstr "这个文件有未保存的更改。"
 
-#: virtaal/views/storeview.py
-msgid "Export failed"
-msgstr "导出失败"
-
-#: virtaal/views/storeview.py
-msgid "Preview failed"
-msgstr "预览失败"
-
 #: virtaal/views/unitview.py
 msgid "Move one step back in the workflow (Ctrl+Shift+Enter)"
 msgstr "工作流中后移一步 (Ctrl+Shift+Enter)"
@@ -3070,3 +3068,9 @@ msgstr "多个插件和定制的选项"
 
 #~ msgid "The file \"%s\" does not exist."
 #~ msgstr "\"%s\" 文件不存在。"
+
+#~ msgid "Export failed"
+#~ msgstr "导出失败"
+
+#~ msgid "Preview failed"
+#~ msgstr "预览失败"

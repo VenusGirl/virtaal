@@ -89,7 +89,7 @@ def _fake_gtkspell(existing=None, get_from_text_view_raises=None):
     return SimpleNamespace(Checker=_Checker), created
 
 
-@pytest.mark.parametrize("language,expected", [("pt", "pt_PT"), ("de", "de_DE")])
+@pytest.mark.parametrize("language,expected", [("pt", "pt_PT"), ("de", "de_DE"), ("ca", "ca_ES"), ("sr", "sr_RS")])
 def test_on_unit_lang_changed_maps_to_country_variant(language, expected):
     """Regression: a `==` vs `=` typo made these branches no-ops, so 'pt'
     and 'de' were probed against enchant as themselves instead of the
@@ -103,6 +103,24 @@ def test_on_unit_lang_changed_maps_to_country_variant(language, expected):
     Plugin._on_unit_lang_changed(plugin, unit_view=None, text_view=SimpleNamespace(), language=language)
 
     assert plugin.enchant.checked == [expected]
+
+
+def test_on_unit_lang_changed_falls_back_to_any_region_without_the_default_one():
+    # es tries es_ES first (#4675), but a system with only es_MX still gets it.
+    plugin = Plugin.__new__(Plugin)
+    plugin.gtkspell = object()
+    plugin.enchant = _FakeEnchant(known_dicts=set())
+    plugin._seen_languages = {}
+    plugin._enchant_languages = ['es_MX']
+    text_view = SimpleNamespace()
+
+    with pytest.MonkeyPatch.context() as mp:
+        calls = []
+        mp.setattr(GLib, 'idle_add', lambda *a, **k: calls.append((a, k)))
+        Plugin._on_unit_lang_changed(plugin, unit_view=None, text_view=text_view, language='es')
+
+    assert plugin.enchant.checked == ['es_ES', 'es']
+    assert calls == [((plugin._activate_checker, text_view, 'es_MX'), {'priority': GLib.PRIORITY_LOW})]
 
 
 def test_on_unit_lang_changed_does_nothing_once_gtkspell_is_gone():
@@ -147,6 +165,23 @@ def test_on_unit_lang_changed_finds_a_country_variant_enchant_supports():
 
     assert plugin._seen_languages['xx'] == 'xx_YY'
     assert calls == [((plugin._activate_checker, text_view, 'xx_YY'), {'priority': GLib.PRIORITY_LOW})]
+
+
+def test_on_unit_lang_changed_asks_enchant_for_the_locales_tag():
+    # Enchant ignores "@" names: ca@valencia's dictionary is ca_VALENCIA (#4665).
+    plugin = Plugin.__new__(Plugin)
+    plugin.gtkspell = object()
+    plugin.enchant = _FakeEnchant(known_dicts={'ca_VALENCIA'})
+    plugin._seen_languages = {}
+    plugin._enchant_languages = ['ca_VALENCIA']
+    text_view = SimpleNamespace()
+
+    with pytest.MonkeyPatch.context() as mp:
+        calls = []
+        mp.setattr(GLib, 'idle_add', lambda *a, **k: calls.append((a, k)))
+        Plugin._on_unit_lang_changed(plugin, unit_view=None, text_view=text_view, language='ca@valencia')
+
+    assert calls == [((plugin._activate_checker, text_view, 'ca_VALENCIA'), {'priority': GLib.PRIORITY_LOW})]
 
 
 def test_on_unit_lang_changed_disables_and_caches_a_language_with_no_dictionary(monkeypatch):

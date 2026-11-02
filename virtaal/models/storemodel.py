@@ -5,6 +5,7 @@
 # later license. See the LICENSE file for a copy of the license and
 # the AUTHORS.md file for copyright and authorship information.
 
+import functools
 import os
 
 from virtaal.common import pan_app
@@ -36,6 +37,46 @@ def fix_indexes(stats, valid_units=None):
                 continue
             new_stats[key] = [valid_unit_indexes[i] for i in stats[key]]
     return new_stats
+
+
+def _update_contributor(store, name, email=None):
+    """store.updatecontributor() for a file with any line endings:
+    translate-toolkit joins the comments it rebuilds with LF but splits
+    them on the file's own line ending (#4594)."""
+    header = store.header()
+    newline = getattr(header, 'newline', '\n')
+    if header is None or newline == '\n':
+        store.updatecontributor(name, email)
+        return
+    addnote = header.addnote
+    header.addnote = lambda text, *args, **kwargs: addnote(text.replace('\n', newline), *args, **kwargs)
+    try:
+        store.updatecontributor(name, email)
+    finally:
+        del header.addnote
+
+
+# Every n%10 and n%100 case; Breton's fourth form needs a multiple of a million.
+_PLURAL_SAMPLES = (*range(200), *(m * 10**k for k in range(3, 10) for m in range(1, 10)))
+
+
+@functools.cache
+def _usable_plural(nplurals, plural):
+    """Whether gettext can read this plural equation and it gives exactly
+    the forms 0 to nplurals - 1. One entered in Add Missing Language or
+    Edit Translation Language isn't checked (#4351)."""
+    import gettext
+    try:
+        forms = {gettext.c2py(plural)(n) for n in _PLURAL_SAMPLES}
+        expected = set(range(int(nplurals)))
+    except (TypeError, ValueError, ZeroDivisionError):
+        forms, expected = None, set()
+    if forms != expected:
+        import logging
+        logging.warning("Not writing a plural equation that doesn't give %s forms into the header: %r",
+                        nplurals, plural)
+        return False
+    return True
 
 
 class StoreModel(BaseModel):
@@ -107,7 +148,7 @@ class StoreModel(BaseModel):
         lang = LanguageModel(langcode)
         # Plural forms declared without a language are taken to be this one's.
         if isinstance(self._trans_store, poheader) and lang.plural and (
-                old_langcode or self.get_declared_nplurals() is None):
+                old_langcode or self.get_declared_nplurals() is None) and _usable_plural(lang.nplurals, lang.plural):
             self._trans_store.updateheaderplural(lang.nplurals, lang.plural)
             self.nplurals = self._compute_nplurals(self._trans_store)
         return True
@@ -385,10 +426,10 @@ class StoreModel(BaseModel):
             header_updates["X_Generator"] = pan_app.x_generator
             if name and email:
                 header_updates["Last_Translator"] = "%s <%s>" % (name, email)
-                self._trans_store.updatecontributor(name, email)
+                _update_contributor(self._trans_store, name, email)
             elif name:
                 header_updates["Last_Translator"] = name
-                self._trans_store.updatecontributor(name)
+                _update_contributor(self._trans_store, name)
             if team:
                 header_updates["Language-Team"] = team
             target_lang = self.controller.main_controller.lang_controller.target_lang
@@ -400,6 +441,7 @@ class StoreModel(BaseModel):
             self._trans_store.updateheader(add=True, **header_updates)
 
             # A file's own plural forms stay: its msgstr order follows them.
-            if target_lang.plural and self.get_declared_nplurals() is None:
+            if (target_lang.plural and self.get_declared_nplurals() is None
+                    and _usable_plural(target_lang.nplurals, target_lang.plural)):
                 self._trans_store.updateheaderplural(target_lang.nplurals, target_lang.plural)
                 self.nplurals = self._compute_nplurals(self._trans_store)

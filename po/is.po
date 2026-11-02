@@ -18,6 +18,7 @@ msgstr ""
 
 #: share/applications/io.github.translate.Virtaal.desktop.in
 #: share/virtaal/virtaal.ui virtaal/views/mainview.py
+#: virtaal/views/widgets/aboutdialog.py
 msgid "Virtaal"
 msgstr "Virtaal"
 
@@ -593,6 +594,11 @@ msgstr ""
 
 #: devsupport/tmp_strings.py
 msgid "Edit with Virtaal"
+msgstr ""
+
+#. l10n: Windows installer option, shown only when Virtaal 0.7 is installed
+#: devsupport/tmp_strings.py
+msgid "Uninstall the older Virtaal 0.7 first"
 msgstr ""
 
 #: devsupport/tmp_strings.py
@@ -2450,14 +2456,6 @@ msgstr ""
 msgid "This file has unsaved changes."
 msgstr ""
 
-#: virtaal/views/storeview.py
-msgid "Export failed"
-msgstr "Úflutningur mistókst"
-
-#: virtaal/views/storeview.py
-msgid "Preview failed"
-msgstr "Forskoðun mistókst"
-
 #: virtaal/views/unitview.py
 msgid "Move one step back in the workflow (Ctrl+Shift+Enter)"
 msgstr "Færa sig eitt skref aftur á bak í verkflæðinu (Ctrl+Shift+Enter)"
@@ -3061,3 +3059,9 @@ msgstr "Margar viðbætur og sérsniðnir valkostir"
 
 #~ msgid "Extensive format support"
 #~ msgstr "Yfirgripsmikill stuðningur við skráarsnið"
+
+#~ msgid "Export failed"
+#~ msgstr "Úflutningur mistókst"
+
+#~ msgid "Preview failed"
+#~ msgstr "Forskoðun mistókst"

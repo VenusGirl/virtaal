@@ -14,6 +14,8 @@ that it fired."""
 import json
 import os
 
+import pytest
+
 from virtaal.support.dictionary_downloader import DictionaryDownloader
 from virtaal.support.test_dictionary_source import AR_XCU, CA_XCU, DE_XCU
 
@@ -61,8 +63,8 @@ def test_full_chain_writes_both_files(tmp_path):
     dic_cb(None, b'dic content')
 
     assert done == [True]
-    assert (tmp_path / 'de_DE_frami.aff').read_bytes() == b'aff content'
-    assert (tmp_path / 'de_DE_frami.dic').read_bytes() == b'dic content'
+    assert (tmp_path / 'de_DE.aff').read_bytes() == b'aff content'
+    assert (tmp_path / 'de_DE.dic').read_bytes() == b'dic content'
 
 
 def test_xcu_error_tries_the_next_folder(tmp_path):
@@ -117,7 +119,7 @@ def test_file_error_cleans_up_and_gives_up(tmp_path):
 
     _, aff_cb, _ = client.calls[-1]
     aff_cb(None, b'aff content')
-    assert (tmp_path / 'de_DE_frami.aff').exists()
+    assert (tmp_path / 'de_DE.aff').exists()
 
     _, _dic_cb, dic_err = client.calls[-1]
     dic_err(None, 500)
@@ -221,8 +223,8 @@ def test_start_with_known_files_skips_discovery(tmp_path):
     dic_cb(None, b'dic content')
 
     assert done == [True]
-    assert (tmp_path / 'de_DE_frami.aff').read_bytes() == b'aff content'
-    assert (tmp_path / 'de_DE_frami.dic').read_bytes() == b'dic content'
+    assert (tmp_path / 'de_DE.aff').read_bytes() == b'aff content'
+    assert (tmp_path / 'de_DE.dic').read_bytes() == b'dic content'
 
 
 def test_default_target_dir_is_dictionary_write_dir(monkeypatch):
@@ -248,4 +250,65 @@ def test_default_target_dir_is_dictionary_write_dir(monkeypatch):
     monkeypatch.setattr('os.makedirs', lambda *a, **k: None)
     aff_cb(None, b'aff content')
 
-    assert written == [os.path.join('/fake/dir', 'de_DE_frami.aff')]
+    assert written == [os.path.join('/fake/dir', 'de_DE.aff')]
+
+
+def test_a_404_tries_the_dictionaries_subfolder(tmp_path):
+    # ca, ckb, fr_FR and sv_SE keep their files in <folder>/dictionaries/
+    # while the manifest lists only the file name (#4656).
+    client = _FakeClient()
+    done = []
+    downloader = DictionaryDownloader('ca_ES', on_done=lambda success: done.append(success),
+                                       client=client, target_dir=str(tmp_path))
+
+    downloader.start_with_known_files('ca', ['ca.aff', 'ca.dic'])
+    assert client.last_url().endswith('/ca/ca.aff')
+    _, _aff_cb, aff_err = client.calls[-1]
+    aff_err(None, 404)
+    assert client.last_url().endswith('/ca/dictionaries/ca.aff')
+    _, aff_cb, _ = client.calls[-1]
+    aff_cb(None, b'aff content')
+
+    assert client.last_url().endswith('/ca/ca.dic')
+    _, _dic_cb, dic_err = client.calls[-1]
+    dic_err(None, 404)
+    _, dic_cb, _ = client.calls[-1]
+    dic_cb(None, b'dic content')
+
+    assert done == [True]
+    assert (tmp_path / 'ca_ES.aff').read_bytes() == b'aff content'
+    assert (tmp_path / 'ca_ES.dic').read_bytes() == b'dic content'
+
+
+def test_a_404_in_both_places_gives_up(tmp_path):
+    client = _FakeClient()
+    done = []
+    downloader = DictionaryDownloader('ca_ES', on_done=lambda success: done.append(success),
+                                       client=client, target_dir=str(tmp_path))
+
+    downloader.start_with_known_files('ca', ['ca.aff'])
+    client.calls[-1][2](None, 404)
+    client.calls[-1][2](None, 404)
+
+    assert done == [False]
+    assert len(client.calls) == 2
+
+
+@pytest.mark.parametrize('locale, files, saved', [
+    ('af_NA', ['af_ZA.aff', 'af_ZA.dic'], ['af_NA.aff', 'af_NA.dic']),
+    ('fa_IR', ['fa-IR.aff', 'fa-IR.dic'], ['fa_IR.aff', 'fa_IR.dic']),
+    ('ca@valencia', ['ca-valencia.aff', 'ca-valencia.dic'], ['ca_VALENCIA.aff', 'ca_VALENCIA.dic']),
+])
+def test_saves_the_dictionary_under_the_locales_tag(tmp_path, locale, files, saved):
+    # LibreOffice names files for another locale or with "-"/"@", which
+    # enchant never finds for this locale (#4665).
+    client = _FakeClient()
+    done = []
+    downloader = DictionaryDownloader(locale, on_done=done.append, client=client, target_dir=str(tmp_path))
+
+    downloader.start_with_known_files('folder', files)
+    for content in (b'aff content', b'dic content'):
+        client.calls[-1][1](None, content)
+
+    assert done == [True]
+    assert sorted(p.name for p in tmp_path.iterdir()) == saved

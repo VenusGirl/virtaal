@@ -29,6 +29,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # Abort a stalled git fetch so actions/checkout retries it (#4476).
+  GIT_HTTP_LOW_SPEED_LIMIT: 1000
+  GIT_HTTP_LOW_SPEED_TIME: 60
+
 jobs:
   pre-commit:
     # Lints only the files that changed, not the whole tree - many
@@ -500,9 +505,9 @@ jobs:
         # just be redundant, not N times the information.
         run: |
           if [ "${{ matrix.python-version }}" = "3.13" ]; then
-            xvfb-run -a --server-args="-screen 0 1024x768x24" pytest -rvxs -n auto --cov=virtaal --cov-report=xml virtaal
+            xvfb-run -a --server-args="-screen 0 1024x768x24" pytest -rvxs -n auto --dist loadgroup --cov=virtaal --cov-report=xml virtaal
           else
-            xvfb-run -a --server-args="-screen 0 1024x768x24" pytest -rvxs -n auto virtaal
+            xvfb-run -a --server-args="-screen 0 1024x768x24" pytest -rvxs -n auto --dist loadgroup virtaal
           fi
 
       - name: Upload coverage to Codecov
@@ -561,7 +566,7 @@ jobs:
 
       - name: Run tests
         if: steps.queue.outputs.tested != 'true'
-        run: xvfb-run -a --server-args="-screen 0 1024x768x24" pytest -rvxs -n auto virtaal
+        run: xvfb-run -a --server-args="-screen 0 1024x768x24" pytest -rvxs -n auto --dist loadgroup virtaal
 
   test-windows:
     runs-on: windows-latest
@@ -1488,7 +1493,14 @@ jobs:
       - name: Commit the progress if it changed
         env:
           PACKS: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # An older commit's run can finish after a newer one's.
+          old=$(python3 -c 'import json; print(json.load(open("progress.json"))["commit"])' 2>/dev/null || true)
+          if [ -n "$old" ] && [ "$(gh api "repos/$GITHUB_REPOSITORY/compare/$old...$GITHUB_SHA" --jq .status)" = behind ]; then
+            echo "progress.json is already at ${old::8}, newer than ${GITHUB_SHA::8}"
+            exit 0
+          fi
           python3 - "$RUNNER_TEMP/progress/translation-progress.json" <<'EOF'
           # Rewritten when the standing changes, and weekly so the packs
           # link stays within the artifacts' 30 days.
@@ -1703,7 +1715,7 @@ jobs:
           read -ra deps <<< "$(python3 -c 'import tomllib; print(" ".join(d for d in tomllib.load(open("pyproject.toml", "rb"))["project"]["optional-dependencies"]["test"] if not d.startswith("pytest-cov")))')"
           xvfb-run -a --server-args="-screen 0 1024x768x24" dbus-run-session -- \
             flatpak run --devel --filesystem="$GITHUB_WORKSPACE" --command=sh io.github.translate.Virtaal \
-            -euxc 'cd "$1"; shift; python3 -m pip install --target /tmp/testdeps "$@"; PYTHONPATH=/tmp/testdeps env -u FLATPAK_ID python3 -m pytest -rvxs -n auto virtaal' \
+            -euxc 'cd "$1"; shift; python3 -m pip install --target /tmp/testdeps "$@"; PYTHONPATH=/tmp/testdeps env -u FLATPAK_ID python3 -m pytest -rvxs -n auto --dist loadgroup virtaal' \
             sh "$GITHUB_WORKSPACE" "${deps[@]}"
           flatpak uninstall --user -y --noninteractive io.github.translate.Virtaal
 
