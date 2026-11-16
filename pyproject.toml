@@ -77,11 +77,11 @@ dependencies = [
 
 [project.optional-dependencies]
 spellcheck = ["pyenchant==3.3.0"]
-test = ["pytest==9.1.1", "pytest-cov==7.1.0", "pytest-xdist==3.8.0", "pytest-timeout==2.4.0"]
+test = ["pytest==9.2.0", "pytest-cov==7.1.0", "pytest-xdist==3.8.0", "pytest-timeout==2.4.0"]
 docs = ["Sphinx==9.1.0; python_version >= '3.12'"]
 # Not wired into pre-commit or CI - GTK/GI stub coverage isn't good
 # enough yet for a repo-wide rollout.
-type-check = ["ty==0.0.91"]
+type-check = ["ty==0.0.99"]
 
 [project.urls]
 Homepage = "https://virtaal.translatehouse.org"
@@ -180,6 +180,10 @@ omit = [
 # tests), so an incidental single-line drop on an unrelated PR doesn't
 # fail CI on its own.
 fail_under = 87
+# fail_under compares the total rounded to this many decimals: at the
+# default, 0, 86.55% rounded up to 87 and passed while pytest-cov
+# printed "FAIL Required test coverage of 87.0% not reached".
+precision = 2
 
 [tool.codespell]
 skip = "*.po,*.pot,po/*,ChangeLog,build,dist,*.egg-info,docs/_themes,devsupport/testfiles,.git,virtaal/support/test_statsdb_ported.py,devsupport/packaging/windows/languages/*"
